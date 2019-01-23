@@ -5,13 +5,11 @@ const S3S = require('s3-streams');
 
 function createOptions(event, options) {
     let endpoint = `.${event.endpoint}`;
-    console.log(event.endpoint + " " + endpoint);
     if (endpoint == '.prod') { endpoint = ''; }
     const baseUrl = `https://api${endpoint}.sumologic.com`;
-    console.log(baseUrl);
     return Object.assign(options, { 
-        baseUrl: baseUrl,
-        auth: event.accessId + ':' + event.accessKey,
+        baseUrl: `https://api${endpoint}.sumologic.com`,
+        auth: `${event.accessId}:${event.accessKey}`,
         headers: { 
             'Content-Type': 'application/json',
             'Cookie': event.cookie
@@ -22,7 +20,8 @@ function createOptions(event, options) {
 
 module.exports.start = async function(event) {
     assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), `Unknown endpoint "${event.endpoint}"`);
+    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), 
+        `Unknown endpoint "${event.endpoint}"`);
     assert(event.accessId, 'Missing argument "accessId"');
     assert(event.accessKey, 'Missing argument "accessKey"');
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
@@ -55,7 +54,8 @@ module.exports.start = async function(event) {
 
 module.exports.poll = async function(event) {
     assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), `Unknown endpoint "${event.endpoint}"`);
+    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), 
+        `Unknown endpoint "${event.endpoint}"`);
     assert(event.accessId, 'Missing argument "accessId"');
     assert(event.accessKey, 'Missing argument "accessKey"');
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
@@ -64,7 +64,7 @@ module.exports.poll = async function(event) {
     assert(event.id, 'Missing argument "id"');
 
     const options = createOptions(event, {});
-    const response = await http('/api/v1/search/jobs/' + event.id, options);
+    const response = await http(`/api/v1/search/jobs/${event.id}`, options);
     return {    
         endpoint: event.endpoint,
         accessId: event.accessId,
@@ -83,7 +83,8 @@ module.exports.poll = async function(event) {
 
 module.exports.dump = async function(event) {
     assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), `Unknown endpoint "${event.endpoint}"`);
+    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), 
+        `Unknown endpoint "${event.endpoint}"`);
     assert(event.accessId, 'Missing argument "accessId"');
     assert(event.accessKey, 'Missing argument "accessKey"');
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
@@ -93,20 +94,19 @@ module.exports.dump = async function(event) {
     assert(event.messageCount, 'Missing argument "messageCount"');
 
     const bucket = event.s3Bucket;
-    const messagesKey = event.s3KeyPrefix + event.id + '_messages'
+    const messagesKey = `${event.s3KeyPrefix}${event.id}_messages`
     const messagesStream = S3S.WriteStream(new AWS.S3(), {
         'Bucket': bucket,
         'Key': messagesKey
     });
     // Imminent insanity
     const fin = new Promise((resolve, reject) => {
-        console.log("Registering error and finish handlers for messagesStream");
         messagesStream.on('error', function(err) {
             console.log("Error!");
             console.log(err);
             reject(err);
         }).on('finish', function () {
-            const messagesPath = 's3://' + bucket + '/' + messagesKey;
+            const messagesPath = `s3://${bucket}/${messagesKey}`;
             console.log(`S3 upload finished. Path: ${messagesPath}`);
             resolve({ messagesPath: messagesPath });
         });
@@ -117,11 +117,11 @@ module.exports.dump = async function(event) {
     let totalDataSize = 0
     for (var offset = 0; offset < messageCount; offset += maxLimit) {
         const limit = Math.min(maxLimit, messageCount - offset);
-        const path = '/api/v1/search/jobs/' + event.id + '/messages?offset=' + offset + '&limit=' + limit;
+        const path = `/api/v1/search/jobs/${event.id}/messages?offset=${offset}&limit=${limit}`;
         const response = await http(path, options);
         const output = JSON.stringify(response.body);
         totalDataSize += output.length;
-        console.log("Got data for " + offset + " " + limit + " total data now " + totalDataSize);
+        console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
         messagesStream.write(output);               
     };
     messagesStream.end();
