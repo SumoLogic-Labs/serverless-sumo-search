@@ -23,19 +23,28 @@ provider:
   profile: s1ss_sls
   stage: dev
   region: us-west-2
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "s3:*"
+      Resource: "*"
 
 functions:
   start:
     handler: handler.start
+    memory: 128
   poll:
     handler: handler.poll
-  end:
-    handler: handler.end
+    memory: 128
+  dump:
+    handler: handler.dump
+    memory: 128
+    timeout: 900
 
 stepFunctions:
   stateMachines:
-    sumoquery:
-      name: 'sumoquery'
+    sumosearch:
+      name: 'sumosearch'
       definition:
         Comment: "Run a Sumo Logic query and get the results in an S3 object"
         StartAt: Start
@@ -46,7 +55,7 @@ stepFunctions:
             Next: Wait
           Wait:
             Type: Wait
-            Seconds: 5
+            Seconds: 1
             Next: Poll
           Poll:
             Type: Task
@@ -57,29 +66,17 @@ stepFunctions:
             Choices:
               - Variable: $.state
                 StringEquals: "DONE GATHERING RESULTS"
-                Next: End
+                Next: Dump
             Default: Wait
-          End:
+          Dump:
             Type: Task
-            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, self:provider.stage}-end"
+            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, self:provider.stage}-dump"
+            TimeoutSeconds: 300
+            HeartbeatSeconds: 60
             End: true
 
 
-# you can add statements to the Lambda function's IAM Role here
-#  iamRoleStatements:
-#    - Effect: "Allow"
-#      Action:
-#        - "s3:ListBucket"
-#      Resource: { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ] ]  }
-#    - Effect: "Allow"
-#      Action:
-#        - "s3:PutObject"
-#      Resource:
-#        Fn::Join:
-#          - ""
-#          - - "arn:aws:s3:::"
-#            - "Ref" : "ServerlessDeploymentBucket"
-#            - "/*"
+
 
 # you can define service wide environment variables here
 #  environment:
@@ -93,10 +90,6 @@ stepFunctions:
 #  exclude:
 #    - exclude-me.js
 #    - exclude-me-dir/**
-
-# functions:
-#   hello:
-#     handler: handler.hello
 
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events

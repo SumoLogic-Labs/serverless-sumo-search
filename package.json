@@ -2,7 +2,10 @@
   "name": "s1ss_sls02",
   "description": "",
   "version": "0.1.0",
-  "dependencies": {},
+  "dependencies": {
+    "got": "^9.6.0",
+    "s3-streams": "^0.4.0",
+  },
   "devDependencies": {
     "serverless-pseudo-parameters": "^2.4.0",
     "serverless-step-functions": "^1.9.0"
