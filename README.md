@@ -6,8 +6,8 @@ In the meantime:
 
 ```
 npm install -g serverless
-git clone https://github.com/SumoLogic/serverless-query.git
-cd serverless-query
+git clone https://github.com/SumoLogic/serverless-sumo-search-query.git
+cd serverless-sumo-search-query
 npm install # Ignore warnings
 serverless deploy
 serverless invoke stepf -n sumosearch --data \
