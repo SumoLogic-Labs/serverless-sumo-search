@@ -1,5 +1,5 @@
 Work in progress:
-- Doesn't actually create proper CSV output
+- ~~Doesn't actually create proper CSV output~~
 - Should send SNS notification at the end
 
 In the meantime:
