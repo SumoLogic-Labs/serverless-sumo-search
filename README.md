@@ -16,4 +16,5 @@ serverless invoke stepf -n sumosearch --data \
 '{"endpoint": "[prod|us2|...]", "accessId": "[sumo-access-id]", "accessKey": "[sumo-access-key]", "query": "error | count", "from": "2019-01-19T16:00:00", "to": "2019-01-19T16:01:00", "timeZone": "Asia/Kolkata", "s3Bucket": "[your-bucket]", "s3KeyPrefix": "[your-prefix]"}'
 ```
 
-Note: Need to have AWS credentials in `~/.aws/credentials`.
+Note: Need to have AWS credentials in `~/.aws/credentials` under profile `s1ss_sls` 
+(or change profile name in `serverless.yml`).

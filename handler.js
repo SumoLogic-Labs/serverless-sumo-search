@@ -4,15 +4,16 @@ const http = require('got');
 const papa = require('papaparse');
 const S3S = require('s3-streams');
 const AWS = require('aws-sdk');
-const AWSXRay = require('aws-xray-sdk');
-AWSXRay.captureAWS(AWS);
 
+// Re-enable XRay once I figure out how to connect across
+// step function invocations.
+// const AWSXRay = require('aws-xray-sdk');
+// AWSXRay.captureAWS(AWS);
 
 function createOptions(event, options) {
     let endpoint = `.${event.endpoint}`;
-    if (endpoint == '.prod') { endpoint = ''; }
-    const baseUrl = `https://api${endpoint}.sumologic.com`;
-    return Object.assign(options, { 
+    if (endpoint === '.prod') { endpoint = ''; }
+    return Object.assign(options, {
         baseUrl: `https://api${endpoint}.sumologic.com`,
         auth: `${event.accessId}:${event.accessKey}`,
         headers: { 
@@ -103,7 +104,7 @@ module.exports.dump = async function(event) {
     assert(event.messageCount, 'Missing argument "messageCount"');
 
     const bucket = event.s3Bucket;
-    const messagesKey = `${event.s3KeyPrefix}${event.id}_messages.csv`
+    const messagesKey = `${event.s3KeyPrefix}${event.id}_messages.csv`;
     const messagesStream = S3S.WriteStream(new AWS.S3(), {
         'Bucket': bucket,
         'Key': messagesKey
@@ -123,7 +124,7 @@ module.exports.dump = async function(event) {
     const options = createOptions(event, {});
     const maxLimit = 100;
     const messageCount = event.messageCount;
-    let totalDataSize = 0
+    let totalDataSize = 0;
     let isFirst = true;
     let fields;
     for (var offset = 0; offset < messageCount; offset += maxLimit) {
@@ -139,7 +140,7 @@ module.exports.dump = async function(event) {
         console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
         messagesStream.write(output);               
         isFirst = false;
-    };
+    }
     messagesStream.end();
     return await fin;
 };

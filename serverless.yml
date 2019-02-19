@@ -28,8 +28,9 @@ provider:
     - Effect: "Allow"
       Action:
         - "s3:*"
-        - "xray:PutTraceSegments"
-        - "xray:PutTelemetryRecords"
+# Re-enable XRay once I figure out how to connect across step function invocations.
+#        - "xray:PutTraceSegments"
+#        - "xray:PutTelemetryRecords"
       Resource: "*"
 
 functions:
@@ -81,9 +82,11 @@ stepFunctions:
 plugins:
   - serverless-step-functions
   - serverless-pseudo-parameters
-  - serverless-plugin-tracing
+#  - serverless-plugin-tracing
 
 
+
+# Default boilerplate stuff commented out below.
 
 # you can define service wide environment variables here
 #  environment:
