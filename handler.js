@@ -1,7 +1,12 @@
 const assert = require('assert');
+const _ = require('lodash');
 const http = require('got');
-const AWS = require('aws-sdk');
+const papa = require('papaparse');
 const S3S = require('s3-streams');
+const AWS = require('aws-sdk');
+const AWSXRay = require('aws-xray-sdk');
+AWSXRay.captureAWS(AWS);
+
 
 function createOptions(event, options) {
     let endpoint = `.${event.endpoint}`;
@@ -40,7 +45,11 @@ module.exports.start = async function(event) {
             timeZone: event.timeZone
         }
     });
+    // const subsegment = new AWSXRay.Segment("create-job");
+    // console.log(`Segment: ${subsegment}`);
     const response = await http('/api/v1/search/jobs', options);
+    // subsegment.close();
+
     return {    
         endpoint: event.endpoint,
         accessId: event.accessId,
@@ -94,7 +103,7 @@ module.exports.dump = async function(event) {
     assert(event.messageCount, 'Missing argument "messageCount"');
 
     const bucket = event.s3Bucket;
-    const messagesKey = `${event.s3KeyPrefix}${event.id}_messages`
+    const messagesKey = `${event.s3KeyPrefix}${event.id}_messages.csv`
     const messagesStream = S3S.WriteStream(new AWS.S3(), {
         'Bucket': bucket,
         'Key': messagesKey
@@ -115,15 +124,39 @@ module.exports.dump = async function(event) {
     const maxLimit = 100;
     const messageCount = event.messageCount;
     let totalDataSize = 0
+    let isFirst = true;
+    let fields;
     for (var offset = 0; offset < messageCount; offset += maxLimit) {
         const limit = Math.min(maxLimit, messageCount - offset);
         const path = `/api/v1/search/jobs/${event.id}/messages?offset=${offset}&limit=${limit}`;
         const response = await http(path, options);
-        const output = JSON.stringify(response.body);
+        const data = response.body;
+        if (isFirst) {
+            fields = getFields(data);
+        }
+        const output = toCSV(isFirst, fields, data);
         totalDataSize += output.length;
         console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
         messagesStream.write(output);               
+        isFirst = false;
     };
     messagesStream.end();
     return await fin;
 };
+
+function getFields(data) {
+    return _.map(data.fields, (field) => { return field.name});
+}
+
+function toCSV(isFirst, fields, data) {
+    let result = '';
+    if (isFirst) {
+        result += papa.unparse([fields]);
+    }
+    let rows = _.map(data.messages, (message) => {
+        const map = message.map;
+        return _.map(fields, (field) => { return map[field]})
+    });
+    result += papa.unparse(rows);
+    return result;
+}

@@ -23,10 +23,13 @@ provider:
   profile: s1ss_sls
   stage: dev
   region: us-west-2
+  tracing: true
   iamRoleStatements:
     - Effect: "Allow"
       Action:
         - "s3:*"
+        - "xray:PutTraceSegments"
+        - "xray:PutTelemetryRecords"
       Resource: "*"
 
 functions:
@@ -75,6 +78,10 @@ stepFunctions:
             HeartbeatSeconds: 60
             End: true
 
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters
+  - serverless-plugin-tracing
 
 
 
@@ -136,6 +143,3 @@ stepFunctions:
 #       Description: "Description for the output"
 #       Value: "Some output value"
 
-plugins:
-  - serverless-step-functions
-  - serverless-pseudo-parameters
