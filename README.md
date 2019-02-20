@@ -1,7 +1,7 @@
 Work in progress:
 - ~~Doesn't actually create proper CSV output~~
+- ~~Deal with records also (aggregation queries)~~
 - API frontend
-- Deal with records also (aggregation queries)
 - Should send SNS notification at the end
 - Error handling
 - Tests!!!
