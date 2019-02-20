@@ -24,6 +24,66 @@ function createOptions(event, options) {
     });
 }
 
+async function dump(event, messagesOrRecords) {
+    assert(event.endpoint, 'Missing argument "endpoint"');
+    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint),
+        `Unknown endpoint "${event.endpoint}"`);
+    assert(event.accessId, 'Missing argument "accessId"');
+    assert(event.accessKey, 'Missing argument "accessKey"');
+    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
+    assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
+    assert(event.cookie, 'Missing argument "cookie"');
+    assert(event.id, 'Missing argument "id"');
+    assert(event.messageCount, 'Missing argument "messageCount"');
+    assert(event.recordCount, 'Missing argument "recordCount"');
+
+    const bucket = event.s3Bucket;
+    const s3Key = `${event.s3KeyPrefix}${event.id}_${messagesOrRecords}.csv`;
+    const s3Stream = S3S.WriteStream(new AWS.S3(), {
+        'Bucket': bucket,
+        'Key': s3Key
+    });
+    // Imminent insanity
+    const fin = new Promise((resolve, reject) => {
+        s3Stream.on('error', function(err) {
+            console.log("Error!");
+            console.log(err);
+            reject(err);
+        }).on('finish', function () {
+            const s3Path = `s3://${bucket}/${s3Key}`;
+            console.log(`S3 upload finished. Path: ${s3Path}`);
+            if (messagesOrRecords === 'messages') {
+                resolve({ messagesPath: s3Path });
+            } else {
+                resolve({ recordsPath: s3Path });
+            }
+        });
+    });
+    const options = createOptions(event, {});
+    const maxLimit = 100;
+    const count = (messagesOrRecords === 'messages') ? event.messageCount : event.recordCount;
+    let totalDataSize = 0;
+    let isFirst = true;
+    let fields;
+    for (var offset = 0; offset < count; offset += maxLimit) {
+        const limit = Math.min(maxLimit, count - offset);
+        const path = `/api/v1/search/jobs/${event.id}/${messagesOrRecords}?offset=${offset}&limit=${limit}`;
+        const response = await http(path, options);
+        const data = response.body;
+        if (isFirst) {
+            fields = getFields(data);
+        }
+        const output = toCSV(isFirst, fields,
+            (messagesOrRecords === 'messages') ? data.messages : data.records);
+        totalDataSize += output.length;
+        console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
+        s3Stream.write(output);
+        isFirst = false;
+    }
+    s3Stream.end();
+    return await fin;
+}
+
 function getFields(data) {
     const result = _.map(data.fields, (field) => { return field.name});
     console.log(`Fields: ${result}`);
@@ -124,123 +184,23 @@ module.exports.poll = async function(event) {
 };
 
 module.exports.dumpMessages = async function(event) {
-    assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint), 
-        `Unknown endpoint "${event.endpoint}"`);
-    assert(event.accessId, 'Missing argument "accessId"');
-    assert(event.accessKey, 'Missing argument "accessKey"');
     assert('messages' in event, 'Missing argument "messages"');
-    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
-    assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
-    assert(event.cookie, 'Missing argument "cookie"');
-    assert(event.id, 'Missing argument "id"');
-    assert(event.messageCount, 'Missing argument "messageCount"');
 
     if (!event.messages) {
         console.log(`Not dumping messages. Parameter "messages": ${event.messages}`);
         return;
     }
 
-    const bucket = event.s3Bucket;
-    const s3Key = `${event.s3KeyPrefix}${event.id}_messages.csv`;
-    const s3Stream = S3S.WriteStream(new AWS.S3(), {
-        'Bucket': bucket,
-        'Key': s3Key
-    });
-    // Imminent insanity
-    const fin = new Promise((resolve, reject) => {
-        s3Stream.on('error', function(err) {
-            console.log("Error!");
-            console.log(err);
-            reject(err);
-        }).on('finish', function () {
-            const s3Path = `s3://${bucket}/${s3Key}`;
-            console.log(`S3 upload finished. Path: ${s3Path}`);
-            resolve({ messagesPath: s3Path });
-        });
-    });
-    const options = createOptions(event, {});
-    const maxLimit = 100;
-    const count = event.messageCount;
-    let totalDataSize = 0;
-    let isFirst = true;
-    let fields;
-    for (var offset = 0; offset < count; offset += maxLimit) {
-        const limit = Math.min(maxLimit, count - offset);
-        const path = `/api/v1/search/jobs/${event.id}/messages?offset=${offset}&limit=${limit}`;
-        const response = await http(path, options);
-        const data = response.body;
-        if (isFirst) {
-            fields = getFields(data);
-        }
-        const output = toCSV(isFirst, fields, data.messages);
-        totalDataSize += output.length;
-        console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
-        s3Stream.write(output);
-        isFirst = false;
-    }
-    s3Stream.end();
-    return await fin;
+    return dump(event, "messages");
 };
 
 module.exports.dumpRecords = async function(event) {
-    assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint),
-        `Unknown endpoint "${event.endpoint}"`);
-    assert(event.accessId, 'Missing argument "accessId"');
-    assert(event.accessKey, 'Missing argument "accessKey"');
-    assert('records' in event, 'Missing argument "records"');
-    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
-    assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
-    assert(event.cookie, 'Missing argument "cookie"');
-    assert(event.id, 'Missing argument "id"');
-    assert(event.recordCount, 'Missing argument "recordCount"');
+    assert('messages' in event, 'Missing argument "records"');
 
     if (!event.records) {
-        console.log(`Not dumping records. Parameter "records": ${event.records}`);
+        console.log(`Not dumping messages. Parameter "records": ${event.records}`);
         return;
     }
 
-    const bucket = event.s3Bucket;
-    const s3Key = `${event.s3KeyPrefix}${event.id}_records.csv`;
-    const s3Stream = S3S.WriteStream(new AWS.S3(), {
-        'Bucket': bucket,
-        'Key': s3Key
-    });
-    // Imminent insanity
-    const fin = new Promise((resolve, reject) => {
-        s3Stream.on('error', function(err) {
-            console.log("Error!");
-            console.log(err);
-            reject(err);
-        }).on('finish', function () {
-            const s3Path = `s3://${bucket}/${s3Key}`;
-            console.log(`S3 upload finished. Path: ${s3Path}`);
-            resolve({ messagesPath: s3Path });
-        });
-    });
-    const options = createOptions(event, {});
-    const maxLimit = 100;
-    const count = event.recordCount;
-    console.log(`Count: ${count}`);
-    let totalDataSize = 0;
-    let isFirst = true;
-    let fields;
-    for (var offset = 0; offset < count; offset += maxLimit) {
-        const limit = Math.min(maxLimit, count - offset);
-        console.log(`Offset: ${offset}, limit: ${limit}`);
-        const path = `/api/v1/search/jobs/${event.id}/records?offset=${offset}&limit=${limit}`;
-        const response = await http(path, options);
-        const data = response.body;
-        if (isFirst) {
-            fields = getFields(data);
-        }
-        const output = toCSV(isFirst, fields, data.records);
-        totalDataSize += output.length;
-        console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
-        s3Stream.write(output);
-        isFirst = false;
-    }
-    s3Stream.end();
-    return await fin;
+    return dump(event, "records");
 };

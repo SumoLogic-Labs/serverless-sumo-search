@@ -3,6 +3,7 @@ Work in progress:
 - API frontend
 - Deal with records also (aggregation queries)
 - Should send SNS notification at the end
+- Error handling
 - Tests!!!
 
 In the meantime:
