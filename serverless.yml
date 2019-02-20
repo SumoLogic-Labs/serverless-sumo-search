@@ -25,15 +25,33 @@ provider:
   region: us-west-2
   tracing: true
   iamRoleStatements:
-    - Effect: "Allow"
+    - Effect: Allow
       Action:
-        - "s3:*"
+        - states:StartExecution
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - s3:*
 # Re-enable XRay once I figure out how to connect across step function invocations.
 #        - "xray:PutTraceSegments"
 #        - "xray:PutTelemetryRecords"
       Resource: "*"
 
 functions:
+  searchAsyncApi:
+    handler: handler.searchAsyncApi
+    memory: 128
+    environment:
+      statemachine_arn: ${self:resources.Outputs.Search.Value}
+    events:
+      - http:
+          path: search
+          method: post
+  searchAsync:
+    handler: handler.searchAsync
+    memory: 128
+    environment:
+      statemachine_arn: ${self:resources.Outputs.Search.Value}
   start:
     handler: handler.start
     memory: 128
@@ -105,7 +123,12 @@ plugins:
   - serverless-pseudo-parameters
 #  - serverless-plugin-tracing
 
-
+resources:
+  Outputs:
+    Search:
+      Description: The ARN of the state machine
+      Value:
+        Ref: Sumosearch # Sic! First letter needs to be uppercase...
 
 # Default boilerplate stuff commented out below.
 
