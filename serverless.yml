@@ -40,8 +40,12 @@ functions:
   poll:
     handler: handler.poll
     memory: 128
-  dump:
-    handler: handler.dump
+  dumpMessages:
+    handler: handler.dumpMessages
+    memory: 128
+    timeout: 900
+  dumpRecords:
+    handler: handler.dumpRecords
     memory: 128
     timeout: 900
 
@@ -73,10 +77,27 @@ stepFunctions:
                 Next: Dump
             Default: Wait
           Dump:
-            Type: Task
-            Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, self:provider.stage}-dump"
-            TimeoutSeconds: 300
-            HeartbeatSeconds: 60
+            Type: Parallel
+            Next: Fin
+            Branches:
+              - StartAt: DumpMessages
+                States:
+                  DumpMessages:
+                    Type: Task
+                    Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, self:provider.stage}-dumpMessages"
+                    TimeoutSeconds: 300
+                    HeartbeatSeconds: 60
+                    End: true
+              - StartAt: DumpRecords
+                States:
+                  DumpRecords:
+                    Type: Task
+                    Resource: "arn:aws:lambda:#{AWS::Region}:#{AWS::AccountId}:function:${self:service}-${opt:stage, self:provider.stage}-dumpRecords"
+                    TimeoutSeconds: 300
+                    HeartbeatSeconds: 60
+                    End: true
+          Fin:
+            Type: Pass
             End: true
 
 plugins:
