@@ -1,5 +1,3 @@
-'use strict';
-
 const _ = require('lodash');
 const assert = require('assert');
 const uuidv4 = require('uuid/v4');
@@ -21,31 +19,30 @@ log.setLevel('debug');
 //
 
 module.exports.searchAsyncApi = async function (event) {
-    log.debug(`searchAsyncApi - Event: ${JSON.stringify(event)}`);
+    debug(d`Event: ${event}`);
 
     // Get the request body
     const body = JSON.parse(event.body);
-    log.debug(`searchAsyncApi - Body: ${JSON.stringify(body)}`);
+    debug(d`Body: ${body}`);
 
     // Invoke the state machine
     const result = await invokeStateMachine(body);
-    log.debug(`searchAsyncApi - Result: ${JSON.stringify(result)}`);
+    debug(d`Result: ${result}`);
 
     const response = {
         statusCode: 200,
         body: JSON.stringify(result)
     };
-    log.debug(`searchAsyncApi - Response: ${JSON.stringify(response)}`);
+    debug(d`Response: ${response}`);
     return response;
 };
 
 module.exports.searchAsync = async function (event) {
-    log.setLevel('debug');
-    log.debug(`searchAsync - Event: ${JSON.stringify(event)}`);
+    debug(d`searchAsync - Event: ${event}`);
 
     // Invoke the state machine and return the result
     const result = await invokeStateMachine(event);
-    log.debug(`searchAsync - Result: ${JSON.stringify(result)}`);
+    debug(d`searchAsync - Result: ${result}`);
     return result;
 };
 
@@ -147,7 +144,7 @@ module.exports.dumpMessages = async function (event) {
 
     // Write out result messages
     if (!event.messages) {
-        log.debug(`dumpMessages - Not dumping messages. Parameter "messages": ${event.messages}`);
+        debug(d`Not dumping messages. Parameter "messages": ${event.messages}`);
         return;
     }
     return writeSearchResultsToS3(event, "messages");
@@ -175,7 +172,7 @@ module.exports.dumpRecords = async function (event) {
 async function invokeStateMachine(event) {
     assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
 
-    log.debug(`invokeStateMachine - Event: ${JSON.stringify(event)}`);
+    debug(d`Event: ${event}`);
 
     // Unless S3 keys are explicitly specified, create them from the specified prefix
     const uuid = uuidv4();
@@ -197,10 +194,10 @@ async function invokeStateMachine(event) {
             log.error(`invokeStateMachine - Err: ${err}`);
             log.error(`invokeStateMachine - Data: ${JSON.stringify(data)}`);
         } else {
-            log.debug(`invokeStateMachine - Data: ${JSON.stringify(data)}`);
+            debug(d`Data: ${data}`);
         }
     }).promise();
-    log.debug(`invokeStateMachine - Response: ${JSON.stringify(response)}`);
+    debug(d`Response: ${response}`);
 
     // Return S3 keys and state machine invocation details.
     const result = {
@@ -209,7 +206,7 @@ async function invokeStateMachine(event) {
         executionArn: response.executionArn,
         startDate: response.startDate
     };
-    log.debug(`invokeStateMachine - Result: ${JSON.stringify(result)}`);
+    debug(d`Result: ${result}`);
     return result;
 }
 
@@ -223,7 +220,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
         const result = _.map(data.fields, (field) => {
             return field.name
         });
-        log.debug(`writeSearchResultsToS3.getFields - Fields: ${result}`);
+        debug(d`Fields: ${result}`);
         return result;
     }
 
@@ -233,7 +230,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
             result += papa.unparse([fields]);
             result += '\n';
         }
-        log.debug(`writeSearchResultsToS3.toCSV - Result: ${result}`);
+        debug(d`Result: ${result}`);
         let rows = _.map(data, (row) => {
             const map = row.map;
             return _.map(fields, (field) => {
@@ -241,7 +238,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
             })
         });
         result += papa.unparse(rows);
-        log.debug(`writeSearchResultsToS3.toCSV - Result: ${result}`);
+        debug(d`Result: ${result}`);
         return result;
     }
 
@@ -277,7 +274,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
             reject(err);
         }).on('finish', function () {
             const s3Path = `s3://${event.s3Bucket}/${s3Key}`;
-            log.debug(`writeSearchResultsToS3 - S3 upload finished. Path: ${s3Path}`);
+            debug(d`S3 upload finished. Path: ${s3Path}`);
             if (messagesOrRecords === 'messages') {
                 resolve({messagesPath: s3Path});
             } else {
@@ -310,7 +307,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
         const output = toCSV(isFirst, fields,
             (messagesOrRecords === 'messages') ? data.messages : data.records);
         totalDataSize += output.length;
-        log.debug(`writeSearchResultsToS3 - Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
+        debug(d`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
         s3Stream.write(output);
         isFirst = false;
     }
@@ -336,4 +333,30 @@ function createHttpOptions(event, options) {
         },
         json: true,
     });
+}
+
+//
+// Borkdrive 12000hp
+//
+
+function debug(message) {
+    log.debug(`${debug.caller.name} - ${message}`);
+}
+
+function d(strings) {
+    let result = "";
+    let counter = 0;
+    let length = arguments.length - 1;
+    for (let i  = 0; i < strings.length; i++) {
+        result += strings[i];
+        if (counter < length) {
+            const argument = arguments[++counter];
+            if (typeof argument === 'object') {
+                result += JSON.stringify(argument);
+            } else {
+                result += argument;
+            }
+        }
+    }
+    return result;
 }
