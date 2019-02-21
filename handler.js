@@ -4,9 +4,12 @@ const _ = require('lodash');
 const assert = require('assert');
 const uuidv4 = require('uuid/v4');
 const http = require('got');
+const log = require('loglevel');
 const papa = require('papaparse');
 const S3S = require('s3-streams');
 const AWS = require('aws-sdk');
+
+log.setLevel('debug');
 
 // Re-enable XRay once I figure out how to connect across
 // step function invocations.
@@ -18,18 +21,32 @@ const AWS = require('aws-sdk');
 //
 
 module.exports.searchAsyncApi = async function (event) {
-    const result = invokeStateMachine(JSON.parse(event.body));
-    console.log(`Result: ${JSON.stringify(result)}`);
+    log.debug(`searchAsyncApi - Event: ${JSON.stringify(event)}`);
+
+    // Get the request body
+    const body = JSON.parse(event.body);
+    log.debug(`searchAsyncApi - Body: ${JSON.stringify(body)}`);
+
+    // Invoke the state machine
+    const result = await invokeStateMachine(body);
+    log.debug(`searchAsyncApi - Result: ${JSON.stringify(result)}`);
+
     const response = {
-        status: 200,
-        body: result
+        statusCode: 200,
+        body: JSON.stringify(result)
     };
-    console.log(`Response: ${JSON.stringify(response)}`);
+    log.debug(`searchAsyncApi - Response: ${JSON.stringify(response)}`);
     return response;
 };
 
 module.exports.searchAsync = async function (event) {
-    return invokeStateMachine(event);
+    log.setLevel('debug');
+    log.debug(`searchAsync - Event: ${JSON.stringify(event)}`);
+
+    // Invoke the state machine and return the result
+    const result = await invokeStateMachine(event);
+    log.debug(`searchAsync - Result: ${JSON.stringify(result)}`);
+    return result;
 };
 
 
@@ -130,7 +147,7 @@ module.exports.dumpMessages = async function (event) {
 
     // Write out result messages
     if (!event.messages) {
-        console.log(`Not dumping messages. Parameter "messages": ${event.messages}`);
+        log.debug(`dumpMessages - Not dumping messages. Parameter "messages": ${event.messages}`);
         return;
     }
     return writeSearchResultsToS3(event, "messages");
@@ -144,7 +161,7 @@ module.exports.dumpRecords = async function (event) {
 
     // Write out result records
     if (!event.records) {
-        console.log(`Not dumping messages. Parameter "records": ${event.records}`);
+        log.error(`dumpRecords - Not dumping messages. Parameter "records": ${event.records}`);
         return;
     }
 
@@ -157,6 +174,8 @@ module.exports.dumpRecords = async function (event) {
 
 async function invokeStateMachine(event) {
     assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
+
+    log.debug(`invokeStateMachine - Event: ${JSON.stringify(event)}`);
 
     // Unless S3 keys are explicitly specified, create them from the specified prefix
     const uuid = uuidv4();
@@ -175,20 +194,23 @@ async function invokeStateMachine(event) {
     const stepfunctions = new AWS.StepFunctions();
     const response = await stepfunctions.startExecution(params, function (err, data) {
         if (err) {
-            console.log(`Err: ${err}`);
-            console.log(`Data: ${JSON.stringify(data)}`);
+            log.error(`invokeStateMachine - Err: ${err}`);
+            log.error(`invokeStateMachine - Data: ${JSON.stringify(data)}`);
         } else {
-            console.log(`Data: ${JSON.stringify(data)}`);
+            log.debug(`invokeStateMachine - Data: ${JSON.stringify(data)}`);
         }
     }).promise();
+    log.debug(`invokeStateMachine - Response: ${JSON.stringify(response)}`);
 
     // Return S3 keys and state machine invocation details.
-    return {
+    const result = {
         s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
         s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`,
         executionArn: response.executionArn,
         startDate: response.startDate
     };
+    log.debug(`invokeStateMachine - Result: ${JSON.stringify(result)}`);
+    return result;
 }
 
 async function writeSearchResultsToS3(event, messagesOrRecords) {
@@ -201,7 +223,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
         const result = _.map(data.fields, (field) => {
             return field.name
         });
-        console.log(`Fields: ${result}`);
+        log.debug(`writeSearchResultsToS3.getFields - Fields: ${result}`);
         return result;
     }
 
@@ -211,7 +233,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
             result += papa.unparse([fields]);
             result += '\n';
         }
-        console.log(`Result: ${result}`);
+        log.debug(`writeSearchResultsToS3.toCSV - Result: ${result}`);
         let rows = _.map(data, (row) => {
             const map = row.map;
             return _.map(fields, (field) => {
@@ -219,7 +241,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
             })
         });
         result += papa.unparse(rows);
-        console.log(`Result: ${result}`);
+        log.debug(`writeSearchResultsToS3.toCSV - Result: ${result}`);
         return result;
     }
 
@@ -250,12 +272,12 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
     // Imminent insanity
     const fin = new Promise((resolve, reject) => {
         s3Stream.on('error', function (err) {
-            console.log("Error!");
-            console.log(err);
+            log.error(`writeSearchResultsToS3 - Error!`);
+            log.error(err);
             reject(err);
         }).on('finish', function () {
-            const s3Path = `s3://${bucket}/${s3Key}`;
-            console.log(`S3 upload finished. Path: ${s3Path}`);
+            const s3Path = `s3://${event.s3Bucket}/${s3Key}`;
+            log.debug(`writeSearchResultsToS3 - S3 upload finished. Path: ${s3Path}`);
             if (messagesOrRecords === 'messages') {
                 resolve({messagesPath: s3Path});
             } else {
@@ -288,7 +310,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
         const output = toCSV(isFirst, fields,
             (messagesOrRecords === 'messages') ? data.messages : data.records);
         totalDataSize += output.length;
-        console.log(`Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
+        log.debug(`writeSearchResultsToS3 - Got data for offset: ${offset}, limit: ${limit}. Total data now: ${totalDataSize}`);
         s3Stream.write(output);
         isFirst = false;
     }
