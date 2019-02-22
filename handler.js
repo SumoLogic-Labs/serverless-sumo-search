@@ -26,6 +26,7 @@ module.exports.searchAsyncApi = async function (event) {
     debug(d`Body: ${body}`);
 
     // Invoke the state machine
+    body.uuid = uuidv4();
     const result = await invokeStateMachine(body);
     debug(d`Result: ${result}`);
 
@@ -41,6 +42,7 @@ module.exports.searchAsync = async function (event) {
     debug(d`searchAsync - Event: ${event}`);
 
     // Invoke the state machine and return the result
+    event.uuid = uuidv4();
     const result = await invokeStateMachine(event);
     debug(d`searchAsync - Result: ${result}`);
     return result;
@@ -68,6 +70,7 @@ module.exports.start = async function (event) {
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
     assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
     assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
+    assert(event.uuid, 'Missing argument "uuid"');
     assert(event.messages || event.records, 'Either "messages" or "records" need to be true');
 
     // Start the search job
@@ -88,11 +91,16 @@ module.exports.start = async function (event) {
         endpoint: event.endpoint,
         accessId: event.accessId,
         accessKey: event.accessKey,
+        query: event.query,
+        from: event.from,
+        to: event.to,
         messages: event.messages,
         records: event.records,
         s3Bucket: event.s3Bucket,
         s3KeyMessages: event.s3KeyMessages,
         s3KeyRecords: event.s3KeyRecords,
+        snsTopic: event.snsTopic,
+        uuid: event.uuid,
         cookie: response.headers['set-cookie'],
         id: response.body.id,
     };
@@ -111,6 +119,7 @@ module.exports.poll = async function (event) {
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
     assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
     assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
+    assert(event.uuid, 'Missing argument "uuid"');
     assert(event.cookie, 'Missing argument "cookie"');
     assert(event.id, 'Missing argument "id"');
 
@@ -121,11 +130,16 @@ module.exports.poll = async function (event) {
         endpoint: event.endpoint,
         accessId: event.accessId,
         accessKey: event.accessKey,
+        query: event.query,
+        from: event.from,
+        to: event.to,
         messages: event.messages,
         records: event.records,
         s3Bucket: event.s3Bucket,
         s3KeyMessages: event.s3KeyMessages,
         s3KeyRecords: event.s3KeyRecords,
+        snsTopic: event.snsTopic,
+        uuid: event.uuid,
         cookie: response.headers['set-cookie'],
         id: event.id,
         state: response.body.state,
@@ -175,12 +189,11 @@ async function invokeStateMachine(event) {
     debug(d`Event: ${event}`);
 
     // Unless S3 keys are explicitly specified, create them from the specified prefix
-    const uuid = uuidv4();
     if (!event.s3KeyMessages) {
-        event.s3KeyMessages = `${event.s3KeyPrefix}${uuid}_messages.csv`;
+        event.s3KeyMessages = `${event.s3KeyPrefix}${event.uuid}_messages.csv`;
     }
     if (!event.s3KeyRecords) {
-        event.s3KeyRecords = `${event.s3KeyPrefix}${uuid}_records.csv`;
+        event.s3KeyRecords = `${event.s3KeyPrefix}${event.uuid}_records.csv`;
     }
 
     // Invoke the state machine asynchronously and get the response
@@ -203,6 +216,7 @@ async function invokeStateMachine(event) {
     const result = {
         s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
         s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`,
+        uuid: event.uuid,
         executionArn: response.executionArn,
         startDate: response.startDate
     };
@@ -312,7 +326,32 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
         isFirst = false;
     }
     s3Stream.end();
-    return await fin;
+    const result = await fin;
+
+    // Send SNS notification if desired
+    if (event.snsTopic) {
+        debug(d`snsTopic: ${event.snsTopic}`);
+        const sns = new AWS.SNS();
+        const subject = `Sumo Logic Serverless Search ${event.uuid}`;
+        const message = JSON.stringify({
+            query: event.query,
+            from: event.from,
+            to: event.to,
+            uuid: event.uuid,
+            type: messagesOrRecords,
+            s3: messagesOrRecords === 'messages' ? result.messagesPath : result.recordsPath
+        });
+        await sns.publish({
+            TopicArn: event.snsTopic,
+            Subject: subject,
+            Message: message
+        }).promise();
+        debug(d`Sent message to snsTopic: ${event.snsTopic}`);
+    } else {
+        debug(d`No SNS topic specified, not sending message`);
+    }
+
+    return result;
 }
 
 function createHttpOptions(event, options) {

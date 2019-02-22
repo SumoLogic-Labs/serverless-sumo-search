@@ -9,6 +9,7 @@
     "loglevel": "^1.6.1",
     "papaparse": "^4.6.3",
     "s3-streams": "^0.4.0",
+    "serverless": "^1.38.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {

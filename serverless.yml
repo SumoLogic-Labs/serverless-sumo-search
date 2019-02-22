@@ -36,6 +36,10 @@ provider:
 #        - "xray:PutTraceSegments"
 #        - "xray:PutTelemetryRecords"
       Resource: "*"
+    - Effect: Allow
+      Action:
+      - "sns:Publish"
+      Resource: "*"
 
 functions:
   searchAsyncApi:
