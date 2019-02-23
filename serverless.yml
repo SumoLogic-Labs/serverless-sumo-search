@@ -122,7 +122,7 @@ stepFunctions:
 plugins:
   - serverless-step-functions
   - serverless-pseudo-parameters
-#  - serverless-plugin-tracing
+  - serverless-plugin-epsagon
 
 resources:
   Outputs:
@@ -130,6 +130,11 @@ resources:
       Description: The ARN of the state machine
       Value:
         Ref: Sumosearch # Sic! First letter needs to be uppercase...
+
+custom:
+  epsagon:
+    token: ${env:EPSAGON_TOKEN}
+    appName: ${env:EPSAGON_APPLICATION_NAME}
 
 # Default boilerplate stuff commented out below.
 
