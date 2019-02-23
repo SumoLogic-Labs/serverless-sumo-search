@@ -9,11 +9,6 @@ const AWS = require('aws-sdk');
 
 log.setLevel('debug');
 
-// Re-enable XRay once I figure out how to connect across
-// step function invocations.
-// const AWSXRay = require('aws-xray-sdk');
-// AWSXRay.captureAWS(AWS);
-
 //
 // Lambda functions
 //
@@ -26,7 +21,7 @@ module.exports.searchAsyncApi = async function (event) {
     debug(d`Body: ${body}`);
 
     // Invoke the state machine
-    body.uuid = uuidv4();
+    body.id = uuidv4();
     const result = await invokeStateMachine(body);
     debug(d`Result: ${result}`);
 
@@ -42,7 +37,7 @@ module.exports.searchAsync = async function (event) {
     debug(d`searchAsync - Event: ${event}`);
 
     // Invoke the state machine and return the result
-    event.uuid = uuidv4();
+    event.id = uuidv4();
     const result = await invokeStateMachine(event);
     debug(d`searchAsync - Result: ${result}`);
     return result;
@@ -70,10 +65,11 @@ module.exports.start = async function (event) {
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
     assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
     assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.uuid, 'Missing argument "uuid"');
+    assert(event.id, 'Missing argument "id"');
     assert(event.messages || event.records, 'Either "messages" or "records" need to be true');
 
     // Start the search job
+    debug(d`Starting search job: ${event}`);
     const options = createHttpOptions(event, {
         method: 'POST',
         body: {
@@ -83,10 +79,8 @@ module.exports.start = async function (event) {
             timeZone: event.timeZone
         }
     });
-    // const subsegment = new AWSXRay.Segment("create-job");
-    // console.log(`Segment: ${subsegment}`);
     const response = await http('/api/v1/search/jobs', options);
-    // subsegment.close();
+    debug(d`Starting search job response: ${response.body}`);
     return {
         endpoint: event.endpoint,
         accessId: event.accessId,
@@ -100,9 +94,9 @@ module.exports.start = async function (event) {
         s3KeyMessages: event.s3KeyMessages,
         s3KeyRecords: event.s3KeyRecords,
         snsTopic: event.snsTopic,
-        uuid: event.uuid,
+        id: event.id,
         cookie: response.headers['set-cookie'],
-        id: response.body.id,
+        searchJobId: response.body.id,
     };
 };
 
@@ -119,13 +113,16 @@ module.exports.poll = async function (event) {
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
     assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
     assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.uuid, 'Missing argument "uuid"');
-    assert(event.cookie, 'Missing argument "cookie"');
     assert(event.id, 'Missing argument "id"');
+    assert(event.cookie, 'Missing argument "cookie"');
+    assert(event.searchJobId, 'Missing argument "searchJobId"');
 
     // Poll the search job status
+
+    debug(d`Polling search job: ${event}`);
     const options = createHttpOptions(event, {});
-    const response = await http(`/api/v1/search/jobs/${event.id}`, options);
+    const response = await http(`/api/v1/search/jobs/${event.searchJobId}`, options);
+    debug(d`Polling search job response: ${response.body}`);
     return {
         endpoint: event.endpoint,
         accessId: event.accessId,
@@ -139,9 +136,9 @@ module.exports.poll = async function (event) {
         s3KeyMessages: event.s3KeyMessages,
         s3KeyRecords: event.s3KeyRecords,
         snsTopic: event.snsTopic,
-        uuid: event.uuid,
-        cookie: response.headers['set-cookie'],
         id: event.id,
+        cookie: response.headers['set-cookie'],
+        searchJobId: event.searchJobId,
         state: response.body.state,
         messageCount: response.body.messageCount,
         recordCount: response.body.recordCount,
@@ -190,10 +187,10 @@ async function invokeStateMachine(event) {
 
     // Unless S3 keys are explicitly specified, create them from the specified prefix
     if (!event.s3KeyMessages) {
-        event.s3KeyMessages = `${event.s3KeyPrefix}${event.uuid}_messages.csv`;
+        event.s3KeyMessages = `${event.s3KeyPrefix}${event.id}_messages.csv`;
     }
     if (!event.s3KeyRecords) {
-        event.s3KeyRecords = `${event.s3KeyPrefix}${event.uuid}_records.csv`;
+        event.s3KeyRecords = `${event.s3KeyPrefix}${event.id}_records.csv`;
     }
 
     // Invoke the state machine asynchronously and get the response
@@ -201,24 +198,16 @@ async function invokeStateMachine(event) {
         stateMachineArn: process.env.statemachine_arn,
         input: JSON.stringify(event)
     };
+    debug(d`State machine invocation params: ${params}`);
     const stepfunctions = new AWS.StepFunctions();
-    const response = await stepfunctions.startExecution(params, function (err, data) {
-        if (err) {
-            log.error(`invokeStateMachine - Err: ${err}`);
-            log.error(`invokeStateMachine - Data: ${JSON.stringify(data)}`);
-        } else {
-            debug(d`Data: ${data}`);
-        }
-    }).promise();
+    const response = await stepfunctions.startExecution(params).promise();
     debug(d`Response: ${response}`);
 
     // Return S3 keys and state machine invocation details.
     const result = {
+        id: event.id,
         s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
-        s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`,
-        uuid: event.uuid,
-        executionArn: response.executionArn,
-        startDate: response.startDate
+        s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`
     };
     debug(d`Result: ${result}`);
     return result;
@@ -269,8 +258,9 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
     assert(event.s3Bucket, 'Missing argument "s3Bucket"');
     assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
     assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.cookie, 'Missing argument "cookie"');
     assert(event.id, 'Missing argument "id"');
+    assert(event.cookie, 'Missing argument "cookie"');
+    assert(event.searchJobId, 'Missing argument "searchJobId"');
     assert(event.messageCount, 'Missing argument "messageCount"');
     assert(event.recordCount, 'Missing argument "recordCount"');
 
@@ -308,7 +298,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
 
         // Get the next set of results
         const limit = Math.min(maxLimit, count - offset);
-        const path = `/api/v1/search/jobs/${event.id}/${messagesOrRecords}?offset=${offset}&limit=${limit}`;
+        const path = `/api/v1/search/jobs/${event.searchJobId}/${messagesOrRecords}?offset=${offset}&limit=${limit}`;
         const response = await http(path, options);
         const data = response.body;
 
@@ -332,12 +322,12 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
     if (event.snsTopic) {
         debug(d`snsTopic: ${event.snsTopic}`);
         const sns = new AWS.SNS();
-        const subject = `Sumo Logic Serverless Search ${event.uuid}`;
+        const subject = `Sumo Logic Serverless Search ${event.id}`;
         const message = JSON.stringify({
             query: event.query,
             from: event.from,
             to: event.to,
-            uuid: event.uuid,
+            id: event.id,
             type: messagesOrRecords,
             s3: messagesOrRecords === 'messages' ? result.messagesPath : result.recordsPath
         });
@@ -379,7 +369,7 @@ function createHttpOptions(event, options) {
 //
 
 function debug(message) {
-    log.debug(`${debug.caller.name} - ${message}`);
+    log.debug(`${new Date().toISOString()} ${debug.caller.name} - ${message}`);
 }
 
 function d(strings) {

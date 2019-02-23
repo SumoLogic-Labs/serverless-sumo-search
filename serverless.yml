@@ -32,9 +32,6 @@ provider:
     - Effect: Allow
       Action:
         - s3:*
-# Re-enable XRay once I figure out how to connect across step function invocations.
-#        - "xray:PutTraceSegments"
-#        - "xray:PutTelemetryRecords"
       Resource: "*"
     - Effect: Allow
       Action:
@@ -44,7 +41,7 @@ provider:
 functions:
   searchAsyncApi:
     handler: handler.searchAsyncApi
-    memory: 128
+    memorySize: 128
     environment:
       statemachine_arn: ${self:resources.Outputs.Search.Value}
     events:
@@ -53,22 +50,22 @@ functions:
           method: post
   searchAsync:
     handler: handler.searchAsync
-    memory: 128
+    memorySize: 128
     environment:
       statemachine_arn: ${self:resources.Outputs.Search.Value}
   start:
     handler: handler.start
-    memory: 128
+    memorySize: 128
   poll:
     handler: handler.poll
-    memory: 128
+    memorySize: 128
   dumpMessages:
     handler: handler.dumpMessages
-    memory: 128
+    memorySize: 128
     timeout: 900
   dumpRecords:
     handler: handler.dumpRecords
-    memory: 128
+    memorySize: 128
     timeout: 900
 
 stepFunctions:

@@ -1,5 +1,5 @@
 function d(strings) {
-    let result = "";
+    let result = new Date().toISOString() + " ";
     let counter = 0;
     let length = arguments.length - 1;
     for (let i  = 0; i < strings.length; i++) {
@@ -27,3 +27,4 @@ function foofun() {
 }
 
 foofun();
+console.log(Date.now());
