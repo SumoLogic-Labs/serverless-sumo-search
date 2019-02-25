@@ -1,10 +1,11 @@
-Work in progress:
+Not officially supported by Sumo Logic, work in progress, use at your own risk:
 - ~~Doesn't actually create proper CSV output~~
 - ~~Deal with records also (aggregation queries)~~
 - ~~API frontend async~~
 - ~~Should send SNS notification at the end?~~
 - API frontend that waits for X seconds and returns or returns a pointer
 - Error handling
+- https://github.com/ACloudGuru/serverless-plugin-cloudwatch-sumologic
 - Tests!!!
 
 In the meantime:
