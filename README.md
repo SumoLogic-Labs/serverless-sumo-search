@@ -3,6 +3,7 @@ Not officially supported by Sumo Logic, work in progress, use at your own risk:
 - ~~Deal with records also (aggregation queries)~~
 - ~~API frontend async~~
 - ~~Should send SNS notification at the end?~~
+- ~~Yucky event properties validation~~
 - API frontend that waits for X seconds and returns or returns a pointer
 - Error handling
 - https://github.com/ACloudGuru/serverless-plugin-cloudwatch-sumologic

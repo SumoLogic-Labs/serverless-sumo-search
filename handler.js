@@ -6,6 +6,7 @@ const log = require('loglevel');
 const papa = require('papaparse');
 const S3S = require('s3-streams');
 const AWS = require('aws-sdk');
+var Ajv = require('ajv');
 
 log.setLevel('debug');
 
@@ -13,8 +14,27 @@ log.setLevel('debug');
 // Lambda functions
 //
 
+const searchAsyncSchema = {
+    type: 'object',
+    properties: {
+        endpoint: {type: 'string', pattern: '^prod|us2|au|de|eu|jp$'},
+        accessId: {type: 'string'},
+        accessKey: {type: 'string'},
+        query: {type: 'string'},
+        to: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        from: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        timeZone: {type: 'string'},
+        messages: {type: 'boolean'},
+        records: {type: 'boolean'},
+        s3Bucket: {type: 'string'},
+        s3KeyPrefix: {type: 'string'},
+    },
+    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
+        'messages', 'records', 's3Bucket', 's3KeyPrefix']
+};
+
 module.exports.searchAsyncApi = async function (event) {
-    debug(d`Event: ${event}`);
+    validateSchema(searchAsyncSchema, event);
 
     // Get the request body
     const body = JSON.parse(event.body);
@@ -34,12 +54,12 @@ module.exports.searchAsyncApi = async function (event) {
 };
 
 module.exports.searchAsync = async function (event) {
-    debug(d`searchAsync - Event: ${event}`);
+    validateSchema(searchAsyncSchema, event);
 
     // Invoke the state machine and return the result
     event.id = uuidv4();
     const result = await invokeStateMachine(event);
-    debug(d`searchAsync - Result: ${result}`);
+    debug(d`Result: ${result}`);
     return result;
 };
 
@@ -48,25 +68,28 @@ module.exports.searchAsync = async function (event) {
 // Lambda functions for the state machine
 //
 
+const startSchema = {
+    type: 'object',
+    properties: {
+        endpoint: {type: 'string', pattern: '^prod|us2|au|de|eu|jp$'},
+        accessId: {type: 'string'},
+        accessKey: {type: 'string'},
+        query: {type: 'string'},
+        to: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        from: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        timeZone: {type: 'string'},
+        messages: {type: 'boolean'},
+        records: {type: 'boolean'},
+        s3Bucket: {type: 'string'},
+        s3KeyMessages: {type: 'string'},
+        s3KeyRecords: {type: 'string'},
+        id: {type: 'string'},
+    },
+    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
+        'messages', 'records', 's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id']
+};
 module.exports.start = async function (event) {
-
-    // Input validation
-    assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint),
-        `Unknown endpoint "${event.endpoint}"`);
-    assert(event.accessId, 'Missing argument "accessId"');
-    assert(event.accessKey, 'Missing argument "accessKey"');
-    assert(event.query, 'Missing argument "query"');
-    assert(event.to, 'Missing argument "to"');
-    assert(event.from, 'Missing argument "from"');
-    assert(event.timeZone, 'Missing argument "timeZone"');
-    assert('messages' in event, 'Missing argument "messages"');
-    assert('records' in event, 'Missing argument "records"');
-    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
-    assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
-    assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.id, 'Missing argument "id"');
-    assert(event.messages || event.records, 'Either "messages" or "records" need to be true');
+    validateSchema(startSchema, event);
 
     // Start the search job
     debug(d`Starting search job: ${event}`);
@@ -100,25 +123,29 @@ module.exports.start = async function (event) {
     };
 };
 
+const pollSchema = {
+    type: 'object',
+    properties: {
+        endpoint: {type: 'string', pattern: '^prod|us2|au|de|eu|jp$'},
+        accessId: {type: 'string'},
+        accessKey: {type: 'string'},
+        messages: {type: 'boolean'},
+        records: {type: 'boolean'},
+        s3Bucket: {type: 'string'},
+        s3KeyMessages: {type: 'string'},
+        s3KeyRecords: {type: 'string'},
+        id: {type: 'string'},
+        cookie: {type: 'string'},
+        searchJobId: {type: 'string'}
+    },
+    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
+        'messages', 'records', 's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id',
+        'cookie', 'searchJobId']
+};
 module.exports.poll = async function (event) {
-
-    // Input validation
-    assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint),
-        `Unknown endpoint "${event.endpoint}"`);
-    assert(event.accessId, 'Missing argument "accessId"');
-    assert(event.accessKey, 'Missing argument "accessKey"');
-    assert('messages' in event, 'Missing argument "messages"');
-    assert('records' in event, 'Missing argument "records"');
-    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
-    assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
-    assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.id, 'Missing argument "id"');
-    assert(event.cookie, 'Missing argument "cookie"');
-    assert(event.searchJobId, 'Missing argument "searchJobId"');
+    validateSchema(pollSchema, event);
 
     // Poll the search job status
-
     debug(d`Polling search job: ${event}`);
     const options = createHttpOptions(event, {});
     const response = await http(`/api/v1/search/jobs/${event.searchJobId}`, options);
@@ -180,10 +207,37 @@ module.exports.dumpRecords = async function (event) {
 // Non-lambda implementation
 //
 
-async function invokeStateMachine(event) {
-    assert(event.s3KeyPrefix, 'Missing argument "s3KeyPrefix"');
+function validateSchema(schema, data) {
+    const ajv = new Ajv({verbose: true, allErrors: true});
+    const valid = ajv.validate(schema, data);
+    if (!valid) {
+        log.error(`validateSchema - ${JSON.stringify(data)}`);
+        log.error(`validateSchema - ${ajv.errors}`);
+        throw Error(JSON.stringify(ajv.errors));
+    }
+}
 
-    debug(d`Event: ${event}`);
+const invokeStateMachineSchema = {
+    type: 'object',
+    properties: {
+        endpoint: {type: 'string', pattern: '^prod|us2|au|de|eu|jp$'},
+        accessId: {type: 'string'},
+        accessKey: {type: 'string'},
+        query: {type: 'string'},
+        to: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        from: {type: 'string', pattern: '^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d$'},
+        timeZone: {type: 'string'},
+        messages: {type: 'boolean'},
+        records: {type: 'boolean'},
+        s3Bucket: {type: 'string'},
+        s3KeyPrefix: {type: 'string'},
+        id: {type: 'string'}
+    },
+    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
+        'messages', 'records', 's3Bucket', 's3KeyPrefix', 'id']
+};
+async function invokeStateMachine(event) {
+    validateSchema(invokeStateMachineSchema, event);
 
     // Unless S3 keys are explicitly specified, create them from the specified prefix
     if (!event.s3KeyMessages) {
@@ -205,14 +259,34 @@ async function invokeStateMachine(event) {
 
     // Return S3 keys and state machine invocation details.
     const result = {
-        id: event.id,
-        s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
-        s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`
-    };
+            id: event.id,
+            s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
+            s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`
+        }
+    ;
     debug(d`Result: ${result}`);
     return result;
 }
 
+const writeSearchResultsToS3Schema = {
+    type: 'object',
+    properties: {
+        endpoint: {type: 'string', pattern: '^prod|us2|au|de|eu|jp$'},
+        accessId: {type: 'string'},
+        accessKey: {type: 'string'},
+        s3Bucket: {type: 'string'},
+        s3KeyMessages: {type: 'string'},
+        s3KeyRecords: {type: 'string'},
+        id: {type: 'string'},
+        cookie: {type: 'string'},
+        searchJobId: {type: 'string'},
+        messageCount: {type: 'number'},
+        recordCount: {type: 'number'}
+    },
+    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
+        'messages', 'records', 's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id',
+        'cookie', 'searchJobId']
+};
 async function writeSearchResultsToS3(event, messagesOrRecords) {
 
     //
@@ -248,21 +322,7 @@ async function writeSearchResultsToS3(event, messagesOrRecords) {
     //
     // Implementation
     //
-
-    // Input validation
-    assert(event.endpoint, 'Missing argument "endpoint"');
-    assert(["prod", "us2", "au", "de", "eu", "jp"].includes(event.endpoint),
-        `Unknown endpoint "${event.endpoint}"`);
-    assert(event.accessId, 'Missing argument "accessId"');
-    assert(event.accessKey, 'Missing argument "accessKey"');
-    assert(event.s3Bucket, 'Missing argument "s3Bucket"');
-    assert(event.s3KeyMessages, 'Missing argument "s3KeyMessages"');
-    assert(event.s3KeyRecords, 'Missing argument "s3KeyRecords"');
-    assert(event.id, 'Missing argument "id"');
-    assert(event.cookie, 'Missing argument "cookie"');
-    assert(event.searchJobId, 'Missing argument "searchJobId"');
-    assert(event.messageCount, 'Missing argument "messageCount"');
-    assert(event.recordCount, 'Missing argument "recordCount"');
+    validateSchema(writeSearchResultsToS3Schema, event);
 
     // Create S3 stream to write the result
     const s3Key = (messagesOrRecords === 'messages') ? event.s3KeyMessages : event.s3KeyRecords;
@@ -376,7 +436,7 @@ function d(strings) {
     let result = "";
     let counter = 0;
     let length = arguments.length - 1;
-    for (let i  = 0; i < strings.length; i++) {
+    for (let i = 0; i < strings.length; i++) {
         result += strings[i];
         if (counter < length) {
             const argument = arguments[++counter];
