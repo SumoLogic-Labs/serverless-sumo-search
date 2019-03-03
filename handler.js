@@ -135,12 +135,11 @@ const pollSchema = {
         s3KeyMessages: {type: 'string'},
         s3KeyRecords: {type: 'string'},
         id: {type: 'string'},
-        cookie: {type: 'string'},
+        // cookie: {type: 'string'},
         searchJobId: {type: 'string'}
     },
-    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
-        'messages', 'records', 's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id',
-        'cookie', 'searchJobId']
+    required: ['endpoint', 'accessId', 'accessKey', 'messages', 'records',
+        's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id', 'cookie', 'searchJobId']
 };
 module.exports.poll = async function (event) {
     validateSchema(pollSchema, event);
@@ -236,6 +235,7 @@ const invokeStateMachineSchema = {
     required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
         'messages', 'records', 's3Bucket', 's3KeyPrefix', 'id']
 };
+
 async function invokeStateMachine(event) {
     validateSchema(invokeStateMachineSchema, event);
 
@@ -259,11 +259,10 @@ async function invokeStateMachine(event) {
 
     // Return S3 keys and state machine invocation details.
     const result = {
-            id: event.id,
-            s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
-            s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`
-        }
-    ;
+        id: event.id,
+        s3KeyMessages: `s3://${event.s3Bucket}/${event.s3KeyMessages}`,
+        s3KeyRecords: `s3://${event.s3Bucket}/${event.s3KeyRecords}`
+    };
     debug(d`Result: ${result}`);
     return result;
 }
@@ -278,15 +277,15 @@ const writeSearchResultsToS3Schema = {
         s3KeyMessages: {type: 'string'},
         s3KeyRecords: {type: 'string'},
         id: {type: 'string'},
-        cookie: {type: 'string'},
+        // cookie: {type: 'string'},
         searchJobId: {type: 'string'},
         messageCount: {type: 'number'},
         recordCount: {type: 'number'}
     },
-    required: ['endpoint', 'accessId', 'accessKey', 'query', 'to', 'from', 'timeZone',
-        'messages', 'records', 's3Bucket', 's3KeyMessages', 's3KeyRecords', 'id',
-        'cookie', 'searchJobId']
+    required: ['endpoint', 'accessId', 'accessKey', 's3Bucket', 's3KeyMessages', 's3KeyRecords',
+        'id', 'cookie', 'searchJobId', 'messageCount', 'recordCount']
 };
+
 async function writeSearchResultsToS3(event, messagesOrRecords) {
 
     //

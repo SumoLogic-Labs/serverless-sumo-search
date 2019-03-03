@@ -4,9 +4,10 @@ Not officially supported by Sumo Logic, work in progress, use at your own risk:
 - ~~API frontend async~~
 - ~~Should send SNS notification at the end?~~
 - ~~Yucky event properties validation~~
+- ~~Thread ID of the search request through all logs~~
+- ~~https://github.com/ACloudGuru/serverless-plugin-cloudwatch-sumologic https://serverless.com/blog/serverless-ops-logs/~~
 - API frontend that waits for X seconds and returns or returns a pointer
 - Error handling
-- https://github.com/ACloudGuru/serverless-plugin-cloudwatch-sumologic
 - Tests!!!
 
 In the meantime:
