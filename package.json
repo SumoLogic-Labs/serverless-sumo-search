@@ -3,7 +3,7 @@
   "description": "",
   "version": "0.1.0",
   "dependencies": {
-    "ajv": "^6.9.2",
+    "ajv": "^6.12.3",
     "aws-xray-sdk": "^2.2.0",
     "got": "^9.6.0",
     "lodash": "^4.17.11",
