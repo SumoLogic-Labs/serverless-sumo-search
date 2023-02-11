@@ -5,7 +5,7 @@
   "dependencies": {
     "ajv": "^6.9.2",
     "aws-xray-sdk": "^2.2.0",
-    "got": "^9.6.0",
+    "got": "^12.5.3",
     "lodash": "^4.17.11",
     "loglevel": "^1.6.1",
     "papaparse": "^4.6.3",
